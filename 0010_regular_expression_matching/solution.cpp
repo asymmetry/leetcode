@@ -4,12 +4,6 @@
 
 using namespace std;
 
-auto speedup = []() {
-  ios_base::sync_with_stdio(false);
-  cin.tie(NULL);
-  return 0;
-}();
-
 bool isMatch(std::string_view s, std::string_view p) {
   if (p.empty()) return s.empty();
 
