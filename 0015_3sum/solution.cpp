@@ -1,5 +1,5 @@
+#include <algorithm>
 #include <iostream>
-#include <unordered_map>
 #include <vector>
 
 using namespace std;
@@ -9,29 +9,32 @@ class Solution {
   vector<vector<int>> threeSum(vector<int>& nums) {
     int len = (int)nums.size();
 
-    std::unordered_map<int, int> map;
-    for (int i = 0; i < len; i++) {
-      if (map.count(nums[i]) != 0) {
-        map[nums[i]]++;
-      } else {
-        map[nums[i]] = 1;
-      }
-    }
+    std::sort(nums.begin(), nums.end());
 
     vector<vector<int>> result;
 
-    for (const auto& x : map) {
-      int xx = x.first;
-      for (const auto& y : map) {
-        int yy = y.first;
-        if (xx < yy || (xx == yy && x.second >= 2)) {
-          int zz = 0 - xx - yy;
-          if (map.count(zz) == 0 || (zz < xx) || (zz < yy) ||
-              (zz == xx && x.second < 2) || (zz == yy && y.second < 2) ||
-              (zz == xx && zz == yy && x.second < 3)) {
-            continue;
-          }
-          result.push_back(vector<int>{xx, yy, zz});
+    for (int i = 0; i < len - 2; i++) {
+      if (nums[i] > 0) break;
+
+      if (i > 0 && nums[i] == nums[i - 1]) continue;
+
+      int j = i + 1;
+      int k = len - 1;
+
+      while (i < j && j < k) {
+        int sum = nums[i] + nums[j] + nums[k];
+
+        if (sum > 0) {
+          k--;
+        } else if (sum < 0) {
+          j++;
+        } else {
+          result.push_back(vector<int>{nums[i], nums[j], nums[k]});
+
+          while (j < k && nums[j + 1] == nums[j]) j++;
+          j++;
+          while (j < k && nums[k - 1] == nums[k]) k--;
+          k--;
         }
       }
     }
