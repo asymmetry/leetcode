@@ -65,7 +65,7 @@ class Solution:
                 result.append(node.val)
                 node = node.left
             if nodes:
-                node = nodes.pop()  
+                node = nodes.pop()
                 node = node.right
 
         return result

@@ -47,4 +47,3 @@ class Solution:
 if __name__ == '__main__':
     print(Solution().maximumGap([3, 6, 9, 1]))
     print(Solution().maximumGap([10]))
- 

@@ -53,8 +53,6 @@ class Solution:
         :rtype: bool
         """
 
-        if 
-
         nodes = [root]
         while nodes:
             node = nodes.pop(0)

@@ -15,7 +15,7 @@ class Solution:
 
         if not p:
             return not s
- 
+
         if p[0] == '*':
             i = 0
             while i < len(p) and p[i] == '*':
