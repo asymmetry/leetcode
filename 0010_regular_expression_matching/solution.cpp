@@ -24,16 +24,18 @@ class Solution {
     int len_s = (int)s.size();
     int len_p = (int)p.size();
 
-    std::vector<std::vector<bool>> matches(len_s + 1,
-                                           std::vector<bool>(len_p + 1, false));
-    matches[len_s][len_p] = true;
+    std::vector<std::vector<int>> matches(len_s + 1,
+                                          std::vector<int>(len_p + 1, 0));
+    matches[len_s][len_p] = 1;
 
     for (int is = len_s; is >= 0; is--) {
       for (int ip = len_p - 1; ip >= 0; ip--) {
         bool match = is < len_s && (p[ip] == '.' || p[ip] == s[is]);
         if (ip < len_p - 1 && p[ip + 1] == '*') {
           matches[is][ip] =
-              matches[is][ip + 2] || (match && matches[is + 1][ip]);
+              matches[is][ip + 2] == 1 || (match && matches[is + 1][ip] == 1)
+                  ? 1
+                  : 0;
 
         } else {
           matches[is][ip] = match && matches[is + 1][ip + 1];
@@ -41,7 +43,7 @@ class Solution {
       }
     }
 
-    return matches[0][0];
+    return matches[0][0] == 1;
   }
 };
 

@@ -11,14 +11,16 @@ class Solution {
     int len_s = (int)s.size();
     int len_p = (int)p.size();
 
-    std::vector<std::vector<bool>> matches(len_s + 1,
-                                           std::vector<bool>(len_p + 1, false));
-    matches[0][0] = true;
+    std::vector<std::vector<int>> matches(len_s + 1,
+                                          std::vector<int>(len_p + 1, 0));
+    matches[0][0] = 1;
 
     for (int i = 0; i <= len_s; i++) {
       for (int j = 0; j <= len_p; j++) {
         if (j > 0 && p[j - 1] == '*') {
-          matches[i][j] = matches[i][j - 1] || (i > 0 && matches[i - 1][j]);
+          matches[i][j] =
+              matches[i][j - 1] == 1 || (i > 0 && matches[i - 1][j] == 1) ? 1
+                                                                          : 0;
         }
         if (i > 0 && j > 0 && (s[i - 1] == p[j - 1] || p[j - 1] == '?')) {
           matches[i][j] = matches[i - 1][j - 1];
@@ -26,7 +28,7 @@ class Solution {
       }
     }
 
-    return matches[len_s][len_p];
+    return matches[len_s][len_p] == 1;
   }
 };
 

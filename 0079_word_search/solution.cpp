@@ -9,14 +9,14 @@ class Solution {
     int m = (int)board.size();
     int n = (int)board[0].size();
 
-    vector<vector<bool>> used(m, vector<bool>(n, false));
+    vector<vector<int>> used(m, vector<int>(n, 0));
 
     for (int i = 0; i < m; i++) {
       for (int j = 0; j < n; j++) {
         if (board[i][j] != word[0]) continue;
-        used[i][j] = true;
+        used[i][j] = 1;
         if (search(board, word, used, i, j, 1)) return true;
-        used[i][j] = false;
+        used[i][j] = 0;
       }
     }
 
@@ -24,7 +24,7 @@ class Solution {
   }
 
   bool search(vector<vector<char>>& board, const string& word,
-              vector<vector<bool>>& used, int row, int col, int step) {
+              vector<vector<int>>& used, int row, int col, int step) {
     if (step == (int)word.size()) {
       return true;
     }
@@ -38,13 +38,13 @@ class Solution {
       int r = row + dirs[i][0];
       int c = col + dirs[i][1];
 
-      if (r < 0 || r >= m || c < 0 || c >= n || used[r][c] ||
+      if (r < 0 || r >= m || c < 0 || c >= n || used[r][c] == 1 ||
           board[r][c] != word[step])
         continue;
 
-      used[r][c] = true;
+      used[r][c] = 1;
       if (search(board, word, used, r, c, step + 1)) return true;
-      used[r][c] = false;
+      used[r][c] = 0;
     }
 
     return false;

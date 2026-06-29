@@ -9,21 +9,21 @@ class Solution {
     int rows = (int)matrix.size();
     int cols = (int)matrix[0].size();
 
-    vector<bool> row_zero(rows, false);
-    vector<bool> col_zero(cols, false);
+    vector<int> row_zero(rows, 0);
+    vector<int> col_zero(cols, 0);
 
     for (int i = 0; i < rows; i++) {
       for (int j = 0; j < cols; j++) {
         if (matrix[i][j] == 0) {
-          row_zero[i] = true;
-          col_zero[j] = true;
+          row_zero[i] = 1;
+          col_zero[j] = 1;
         }
       }
     }
 
     for (int i = 0; i < rows; i++) {
       for (int j = 0; j < cols; j++) {
-        if (row_zero[i] || col_zero[j]) matrix[i][j] = 0;
+        if (row_zero[i] == 1 || col_zero[j] == 1) matrix[i][j] = 0;
       }
     }
   }

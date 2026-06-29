@@ -13,16 +13,16 @@ class Solution {
       fact[i] = f;
     }
 
-    vector<bool> used(n + 1, false);
+    vector<int> used(n + 1, 0);
 
     string result;
     for (int i = n; i >= 1; i--) {
       int a = (k - 1) / fact[i - 1];
       int l = 0;
       for (int j = 1; j <= n; j++) {
-        if (!used[j]) {
+        if (used[j] == 0) {
           if (l == a) {
-            used[j] = true;
+            used[j] = 1;
             result.push_back('0' + j);
           }
           l++;

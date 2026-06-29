@@ -11,8 +11,8 @@ class Solution {
       len = len * 2;
     }
     vector<int> result{0};
-    vector<bool> used(len, false);
-    used[0] = true;
+    vector<int> used(len, 0);
+    used[0] = 1;
 
     for (int i = 1; i < len; i++) {
       int cur = result[i - 1];
@@ -20,7 +20,7 @@ class Solution {
         int next = cur ^ (1 << j);
         if (!used[next]) {
           result.push_back(next);
-          used[next] = true;
+          used[next] = 1;
           break;
         }
       }
