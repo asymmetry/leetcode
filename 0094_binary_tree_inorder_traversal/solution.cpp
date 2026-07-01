@@ -5,7 +5,7 @@
 
 using namespace std;
 
-static const int Null = std::numeric_limits<int>::min();
+static const int null = std::numeric_limits<int>::min();
 
 struct TreeNode {
   int val;
@@ -29,13 +29,13 @@ TreeNode* createTree(const vector<int>& nums) {
     TreeNode* node = queue.front();
     queue.pop_front();
 
-    if (nums[i] != Null) {
+    if (nums[i] != null) {
       node->left = new TreeNode(nums[i]);
       queue.push_back(node->left);
     }
     i++;
 
-    if (i < nums.size() && nums[i] != Null) {
+    if (i < nums.size() && nums[i] != null) {
       node->right = new TreeNode(nums[i]);
       queue.push_back(node->right);
     }
@@ -49,22 +49,28 @@ class Solution {
  public:
   vector<int> inorderTraversal(TreeNode* root) {
     vector<int> result;
-    _inorderTraversal(root, result);
+
+    std::deque<TreeNode*> queue;
+    TreeNode* node = root;
+
+    while (!queue.empty() || node != nullptr) {
+      while (node != nullptr) {
+        queue.push_back(node);
+        node = node->left;
+      }
+
+      node = queue.back();
+      queue.pop_back();
+      result.push_back(node->val);
+      node = node->right;
+    }
 
     return result;
-  }
-
-  void _inorderTraversal(TreeNode* root, vector<int>& result) {
-    if (root == nullptr) return;
-
-    _inorderTraversal(root->left, result);
-    result.push_back(root->val);
-    _inorderTraversal(root->right, result);
   }
 };
 
 int main() {
-  vector<int> nums = {1, Null, 12, 111};
+  vector<int> nums = {1, null, 12, 111};
   TreeNode* root = createTree(nums);
 
   Solution solution;
