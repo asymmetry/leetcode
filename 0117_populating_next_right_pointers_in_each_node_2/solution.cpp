@@ -76,7 +76,7 @@ class Solution {
 };
 
 int main() {
-  std::vector<int> nums = {1, 2, 3, 4, 5, 6, 7};
+  std::vector<int> nums = {1, 2, 3, 4, 5, null, 7};
   Node* root = createTree(nums);
 
   Solution solution;
