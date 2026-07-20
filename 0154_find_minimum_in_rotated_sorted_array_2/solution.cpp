@@ -31,7 +31,7 @@ class Solution {
 };
 
 int main() {
-  vector<int> nums = {2,2,2,0,1};
+  vector<int> nums = {2, 2, 2, 0, 1};
 
   Solution solution;
   auto result = solution.findMin(nums);
