@@ -55,6 +55,7 @@ class RingBuffer {
 
     auto value = std::move(buffer[current_head]);
     head.store((current_head + 1) % capacity, std::memory_order_release);
+
     return value;
   }
 

@@ -1,8 +1,6 @@
 // Object pool
 
-use std::cell::UnsafeCell;
 use std::collections::HashSet;
-use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::{
     Arc, Mutex,
@@ -15,39 +13,21 @@ use std::time::{Duration, Instant};
 // A fixed set of reusable objects shared by any number of threads. acquire()
 // lends out one object at a time, and the Handle it returns gives the object
 // back when dropped. An object keeps its state between uses. T need not be
-// Clone. The lifetime on Handle makes the compiler reject a handle that would
-// outlive the pool.
+// Clone.
 pub struct ObjectPool<T> {
-    objects: Vec<UnsafeCell<T>>,
-    freed_tx: mpsc::Sender<usize>,
-    freed_rx: Mutex<mpsc::Receiver<usize>>,
+    freed_tx: mpsc::Sender<T>,
+    freed_rx: Mutex<mpsc::Receiver<T>>,
 }
-
-unsafe impl<T> Sync for ObjectPool<T> where T: Send {}
-
-// Exclusive access to one borrowed object. May be moved to, and dropped on,
-// another thread.
-pub struct Handle<'a, T> {
-    object: *mut T,
-    index: usize,
-    freed_tx: mpsc::Sender<usize>,
-    _marker: PhantomData<&'a mut T>,
-}
-
-unsafe impl<'a, T> Send for Handle<'a, T> where T: Send {}
 
 impl<T> ObjectPool<T> {
     // Calls `factory` exactly `capacity` times right away, and never again.
     // `capacity` must be at least 1.
     pub fn new(capacity: usize, mut factory: impl FnMut() -> T) -> Self {
-        let mut objects = Vec::with_capacity(capacity);
         let (tx, rx) = mpsc::channel();
-        for i in 0..capacity {
-            objects.push(UnsafeCell::new(factory()));
-            let _ = tx.send(i);
+        for _ in 0..capacity {
+            let _ = tx.send(factory());
         }
         Self {
-            objects,
             freed_tx: tx,
             freed_rx: Mutex::new(rx),
         }
@@ -55,41 +35,46 @@ impl<T> ObjectPool<T> {
 
     // Blocks while every object is lent out. Which free object it returns is up
     // to the pool.
-    pub fn acquire(&self) -> Handle<'_, T> {
-        let index = self.freed_rx.lock().unwrap().recv().unwrap();
-        let object = self.objects[index].get();
-        Handle::new(object, index, self.freed_tx.clone())
+    pub fn acquire(&self) -> Handle<T> {
+        let object = self.freed_rx.lock().unwrap().recv().unwrap();
+        Handle::new(object, self.freed_tx.clone())
     }
 }
 
-impl<T> Deref for Handle<'_, T> {
+// Exclusive access to one borrowed object. May be moved to, and dropped on,
+// another thread.
+pub struct Handle<T> {
+    object: Option<T>,
+    freed_tx: mpsc::Sender<T>,
+}
+
+impl<T> Deref for Handle<T> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        unsafe { &*self.object }
+        self.object.as_ref().unwrap()
     }
 }
 
-impl<T> DerefMut for Handle<'_, T> {
+impl<T> DerefMut for Handle<T> {
     fn deref_mut(&mut self) -> &mut T {
-        unsafe { &mut *self.object }
+        self.object.as_mut().unwrap()
     }
 }
 
 // Gives the object back to the pool, waking a blocked acquire.
-impl<T> Drop for Handle<'_, T> {
+impl<T> Drop for Handle<T> {
     fn drop(&mut self) {
-        let _ = self.freed_tx.send(self.index);
+        let object = self.object.take().unwrap();
+        let _ = self.freed_tx.send(object);
     }
 }
 
-impl<'a, T> Handle<'a, T> {
-    fn new(object: *mut T, index: usize, freed_tx: mpsc::Sender<usize>) -> Self {
+impl<T> Handle<T> {
+    fn new(object: T, freed_tx: mpsc::Sender<T>) -> Self {
         Self {
-            object,
-            index,
+            object: Some(object),
             freed_tx,
-            _marker: PhantomData,
         }
     }
 }

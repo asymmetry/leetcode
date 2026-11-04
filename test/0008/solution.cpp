@@ -94,9 +94,11 @@ class Scheduler {
     return task_id;
   }
 
-  // Runs `task` repeatedly until it is cancelled. The first run is `interval`
-  // from now, and each later run is `interval` after the previous one
-  // finishes. `interval` must be positive. Otherwise like schedule_once().
+  // Runs `task` repeatedly until it is cancelled, at a fixed rate: run n is
+  // due n * `interval` from now. A late run does not push back later ones, so
+  // if runs fall behind (for example, a run takes longer than `interval`), the
+  // missed runs happen back to back until the task catches up. `interval` must
+  // be positive. Otherwise like schedule_once().
   TaskId schedule_every(Clock::duration interval, std::function<void()> task) {
     auto now = Clock::now();
     TaskId task_id = next_task_id.fetch_add(1, std::memory_order_relaxed);
@@ -145,7 +147,7 @@ class Scheduler {
  private:
   void worker() {
     while (true) {
-      Task task_;
+      Task task;
       {
         std::unique_lock<std::mutex> lock(mtx);
         while (!stopped) {
@@ -161,7 +163,7 @@ class Scheduler {
 
         if (stopped) return;
 
-        auto task = tasks.top();
+        task = std::move(tasks.top());
         tasks.pop();
 
         if (cancelled_tasks.find(task.index) != cancelled_tasks.end()) {
@@ -170,16 +172,26 @@ class Scheduler {
           continue;
         }
 
-        if (task.repeat) {
-          tasks.emplace(std::move(task.task), task.index, true,
-                        task.next_run + task.interval, task.interval);
-        } else {
+        if (!task.repeat) {
           alive_tasks.erase(task.index);
         }
-        task_ = std::move(task);
       }
 
-      task_.task();
+      task.task();
+
+      if (task.repeat) {
+        std::lock_guard<std::mutex> lock(mtx);
+
+        if (stopped) continue;
+
+        if (cancelled_tasks.find(task.index) != cancelled_tasks.end()) {
+          alive_tasks.erase(task.index);
+          cancelled_tasks.erase(task.index);
+        } else {
+          tasks.emplace(std::move(task.task), task.index, true,
+                        task.next_run + task.interval, task.interval);
+        }
+      }
     }
   }
 

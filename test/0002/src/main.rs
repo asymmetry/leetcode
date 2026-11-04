@@ -2,36 +2,74 @@
 
 use std::cell::UnsafeCell;
 use std::hint;
+use std::mem::MaybeUninit;
+use std::ops::{Deref, DerefMut};
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
 use std::thread;
 
-// Fixed-capacity FIFO queue shared by one producer thread and one consumer
-// thread, using atomics instead of locks. Neither call ever blocks.
-pub struct RingBuffer<T> {
-    buffer: UnsafeCell<Vec<Option<T>>>,
-    capacity: usize,
-    head: AtomicUsize,
-    tail: AtomicUsize,
+#[repr(align(64))]
+struct CachePadded<T>(T);
+
+impl<T> CachePadded<T> {
+    fn new(value: T) -> Self {
+        CachePadded(value)
+    }
 }
 
-unsafe impl<T> Send for RingBuffer<T> where T: Send {}
+impl<T> Deref for CachePadded<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for CachePadded<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+// Fixed-capacity FIFO queue shared by one producer thread and one consumer
+// thread, using atomics instead of locks. Neither call ever blocks.
+#[repr(align(64))]
+pub struct RingBuffer<T> {
+    buffer: Box<[UnsafeCell<MaybeUninit<T>>]>,
+    capacity: usize,
+    head: CachePadded<AtomicUsize>,
+    tail: CachePadded<AtomicUsize>,
+}
+
 unsafe impl<T> Sync for RingBuffer<T> where T: Send {}
+
+impl<T> Drop for RingBuffer<T> {
+    fn drop(&mut self) {
+        let mut head = self.head.load(Ordering::Relaxed);
+        let tail = self.tail.load(Ordering::Relaxed);
+        while head != tail {
+            unsafe {
+                self.buffer[head].get_mut().assume_init_drop();
+            }
+            head = (head + 1) % self.capacity;
+        }
+    }
+}
 
 impl<T> RingBuffer<T> {
     // Holds up to `capacity` items.
     pub fn new(capacity: usize) -> Self {
-        let mut buffer = Vec::new();
+        let mut vec = Vec::with_capacity(capacity + 1);
         for _ in 0..capacity + 1 {
-            buffer.push(None);
+            vec.push(UnsafeCell::new(MaybeUninit::<T>::uninit()));
         }
         Self {
-            buffer: UnsafeCell::new(buffer),
+            buffer: vec.into_boxed_slice(),
             capacity: capacity + 1,
-            head: AtomicUsize::new(0),
-            tail: AtomicUsize::new(0),
+            head: CachePadded::new(AtomicUsize::new(0)),
+            tail: CachePadded::new(AtomicUsize::new(0)),
         }
     }
 
@@ -43,8 +81,9 @@ impl<T> RingBuffer<T> {
             return Err(value);
         }
 
-        let buffer = unsafe { &mut *self.buffer.get() };
-        buffer[current_tail].replace(value);
+        let slot = &self.buffer[current_tail];
+        let raw_ptr = slot.get();
+        unsafe { raw_ptr.write(MaybeUninit::new(value)) };
         self.tail
             .store((current_tail + 1) % self.capacity, Ordering::Release);
 
@@ -59,12 +98,13 @@ impl<T> RingBuffer<T> {
             return None;
         }
 
-        let buffer = unsafe { &mut *self.buffer.get() };
-        let value = buffer[current_head].take();
+        let slot = &self.buffer[current_head];
+        let raw_ptr = slot.get();
+        let value = unsafe { raw_ptr.read().assume_init() };
         self.head
             .store((current_head + 1) % self.capacity, Ordering::Release);
 
-        value
+        Some(value)
     }
 }
 

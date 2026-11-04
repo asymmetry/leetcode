@@ -4,9 +4,9 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdlib>
-#include <deque>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -41,41 +41,40 @@ class ObjectPool {
   class Handle {
    public:
     // Takes over the object. Destroying `other` afterwards gives nothing back.
-    Handle(Handle&& other) noexcept
-        : pool(other.pool), object(other.object), index(other.index) {
-      other.object = nullptr;
+    Handle(Handle&& other) noexcept : pool(other.pool), index(other.index) {
+      other.index = std::numeric_limits<size_t>::max();
     }
 
     Handle& operator=(Handle&&) = delete;
 
     // Gives the object back to the pool, waking a blocked acquire.
     ~Handle() {
-      if (object != nullptr) {
+      if (index != std::numeric_limits<size_t>::max()) {
         pool.free(index);
       }
     }
 
-    T& operator*() { return *object; }
+    T& operator*() { return pool.objects[index]; }
 
-    T* operator->() { return object; }
+    T* operator->() { return &pool.objects[index]; }
 
    private:
     friend class ObjectPool;
 
-    Handle(ObjectPool& pool, T* object, size_t index) noexcept
-        : pool(pool), object(object), index(index) {}
+    Handle(ObjectPool& pool, size_t index) noexcept
+        : pool(pool), index(index) {}
 
     ObjectPool& pool;
-    T* object;
     size_t index;
   };
 
   // Calls `factory` exactly `capacity` times right away, and never again.
   // `capacity` must be at least 1.
-  ObjectPool(size_t capacity, std::function<T()> factory) : pool(), freed() {
+  ObjectPool(size_t capacity, std::function<T()> factory) : objects(), freed() {
+    objects.reserve(capacity);
     freed.reserve(capacity);
     for (size_t i = 0; i < capacity; i++) {
-      pool.push_back(factory());
+      objects.push_back(factory());
       freed.push_back(i);
     }
   }
@@ -92,7 +91,7 @@ class ObjectPool {
     size_t index = freed.back();
     freed.pop_back();
 
-    return Handle(*this, &pool[index], index);
+    return Handle(*this, index);
   }
 
  private:
@@ -102,7 +101,7 @@ class ObjectPool {
     free_obj.notify_one();
   }
 
-  std::deque<T> pool;
+  std::vector<T> objects;
   std::vector<size_t> freed;
 
   std::mutex mtx;

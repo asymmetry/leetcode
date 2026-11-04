@@ -10,11 +10,14 @@ use std::time::{Duration, Instant};
 
 pub type TaskId = u64;
 
+enum TaskType {
+    Once(Box<dyn FnOnce() + Send>),
+    Repeat(Box<dyn FnMut() + Send>),
+}
+
 struct Task {
-    once_task: Option<Box<dyn FnOnce() + Send + Sync>>,
-    repeat_task: Option<Arc<dyn Fn() + Send + Sync>>,
+    task: TaskType,
     index: TaskId,
-    repeat: bool,
     next_run: Instant,
     interval: Duration,
 }
@@ -99,26 +102,37 @@ impl Scheduler {
                             continue;
                         }
 
-                        if task.repeat {
-                            inner.task_heap.push(Task {
-                                once_task: None,
-                                repeat_task: task.repeat_task.clone(),
-                                index: task.index,
-                                repeat: true,
-                                next_run: task.next_run + task.interval,
-                                interval: task.interval,
-                            });
-                        } else {
+                        if !matches!(task.task, TaskType::Repeat(_)) {
                             inner.active_tasks.remove(&task.index);
                         }
 
                         task
                     };
 
-                    if let Some(once_task) = task.once_task {
-                        (once_task)();
-                    } else if let Some(repeat_task) = task.repeat_task {
-                        (repeat_task)();
+                    match task.task {
+                        TaskType::Once(once_task) => (once_task)(),
+                        TaskType::Repeat(mut repeat_task) => {
+                            (repeat_task)();
+
+                            let mut inner = inner.lock().unwrap();
+                            if inner.stopped {
+                                continue;
+                            }
+
+                            if inner.cancelled_tasks.contains(&task.index) {
+                                inner.active_tasks.remove(&task.index);
+                                inner.cancelled_tasks.remove(&task.index);
+                                continue;
+                            }
+
+                            // `task.task` was moved out above, so put the
+                            // closure back into a new Task.
+                            inner.task_heap.push(Task {
+                                task: TaskType::Repeat(repeat_task),
+                                next_run: task.next_run + task.interval,
+                                ..task
+                            });
+                        }
                     }
                 }
             }
@@ -136,14 +150,12 @@ impl Scheduler {
     // task never runs.
     pub fn schedule_once<F>(&self, delay: Duration, task: F) -> TaskId
     where
-        F: FnOnce() + Send + Sync + 'static,
+        F: FnOnce() + Send + 'static,
     {
         let task_id = self.next_task_id.fetch_add(1, Ordering::Relaxed);
         let task = Task {
-            once_task: Some(Box::new(task)),
-            repeat_task: None,
+            task: TaskType::Once(Box::new(task)),
             index: task_id,
-            repeat: false,
             next_run: Instant::now() + delay,
             interval: Duration::ZERO,
         };
@@ -159,19 +171,19 @@ impl Scheduler {
         task_id
     }
 
-    // Runs `task` repeatedly until it is cancelled. The first run is `interval`
-    // from now, and each later run is `interval` after the previous one
-    // finishes. `interval` must be positive. Otherwise like schedule_once().
+    // Runs `task` repeatedly until it is cancelled, at a fixed rate: run n is
+    // due n * `interval` from now. A late run does not push back later ones, so
+    // if runs fall behind (for example, a run takes longer than `interval`), the
+    // missed runs happen back to back until the task catches up. `interval` must
+    // be positive. Otherwise like schedule_once().
     pub fn schedule_every<F>(&self, interval: Duration, task: F) -> TaskId
     where
-        F: Fn() + Send + Sync + 'static,
+        F: FnMut() + Send + Sync + 'static,
     {
         let task_id = self.next_task_id.fetch_add(1, Ordering::Relaxed);
         let task = Task {
-            once_task: None,
-            repeat_task: Some(Arc::new(task)),
+            task: TaskType::Repeat(Box::new(task)),
             index: task_id,
-            repeat: true,
             next_run: Instant::now() + interval,
             interval,
         };
