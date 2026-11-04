@@ -1,4 +1,4 @@
 [workspace]
 resolver = "2"
 members = ["rust/*", "test/*"]
-exclude = ["test/0009"]
+exclude = ["test/0009", "test/0010"]
